@@ -1,0 +1,62 @@
+import cv2
+import mediapipe as mp
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+import time
+
+# Initialize MediaPipe Hands
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7)
+mp_draw = mp.solutions.drawing_utils
+
+# Initialize webcam
+cap = cv2.VideoCapture(0)
+
+# Initialize Selenium WebDriver
+driver = webdriver.Chrome()  # Ensure ChromeDriver is in PATH or specify executable_path
+driver.get("chrome://dino")
+time.sleep(3)  # Wait for the game to load
+
+body = driver.find_element_by_tag_name('body')
+body.send_keys(Keys.SPACE)  # Start the game
+
+def detect_gesture(hand_landmarks):
+    if hand_landmarks:
+        for hand_landmark in hand_landmarks:
+            thumb_tip = hand_landmark.landmark[mp_hands.HandLandmark.THUMB_TIP]
+            index_finger_tip = hand_landmark.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
+
+            # Calculate the distance between thumb tip and index finger tip
+            distance = ((thumb_tip.x - index_finger_tip.x) ** 2 + (thumb_tip.y - index_finger_tip.y) ** 2) ** 0.5
+            return distance < 0.05  # Adjust threshold as needed
+
+    return False
+
+while cap.isOpened():
+    success, image = cap.read()
+    if not success:
+        continue
+
+    image = cv2.cvtColor(cv2.flip(image, 1), cv2.COLOR_BGR2RGB)
+    image.flags.writeable = False
+    results = hands.process(image)
+
+    image.flags.writeable = True
+    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+    if results.multi_hand_landmarks:
+        for hand_landmarks in results.multi_hand_landmarks:
+            mp_draw.draw_landmarks(image, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+
+        if detect_gesture(results.multi_hand_landmarks):
+            body.send_keys(Keys.SPACE)  # Make the Dino jump
+
+    cv2.imshow('Hand Gesture Control', image)
+
+    if cv2.waitKey(5) & 0xFF == 27:  # Press 'Esc' to exit
+        break
+
+cap.release()
+cv2.destroyAllWindows()
+driver.quit()
+hands.close()
